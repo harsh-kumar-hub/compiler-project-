@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MiniC Web IDE</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f4f4f4; }
+        #container { max-width: 900px; margin: 30px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #ccc; padding: 24px; }
+        #editor { height: 350px; border: 1px solid #ccc; border-radius: 4px; }
+        #output { background: #222; color: #eee; padding: 12px; min-height: 100px; border-radius: 4px; margin-top: 16px; font-family: monospace; }
+        .btn { margin: 8px 4px 8px 0; padding: 8px 18px; border: none; border-radius: 4px; background: #1976d2; color: #fff; font-size: 16px; cursor: pointer; }
+        .btn:hover { background: #1565c0; }
+        select, input[type=text] { padding: 6px; border-radius: 4px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+<div id="container">
+    <h2>MiniC Web IDE</h2>
+    <div>
+        <button class="btn" onclick="runCode()">Run</button>
+        <button class="btn" onclick="saveCode()">Save</button>
+        <button class="btn" onclick="loadCode()">Load</button>
+        <select id="fileList"></select>
+        <input type="text" id="filename" placeholder="Filename (e.g. test.mc)" style="width:180px;">
+    </div>
+    <textarea id="editor"></textarea>
+    <div id="output"></div>
+    <div id="inputBox" style="display:none; margin-top:10px;">
+        <input type="text" id="userInput" placeholder="Enter input..." style="width:300px;">
+        <button class="btn" onclick="sendInput()">Send</button>
+    </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/clike/clike.min.js"></script>
+<script>
+    // Setup CodeMirror
+    var editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
+        lineNumbers: true,
+        mode: 'text/x-csrc',
+        theme: 'default',
+        indentUnit: 4,
+        tabSize: 4
+    });
+    editor.setSize('100%', '350px');
+
+    // Set default template code
+    const defaultCode = `// MiniC Program Template
+
+// Main function (required)
+void main() {
+    // Your code here
+    print "Hello, World!";
+}
+`;
+    editor.setValue(defaultCode);
+
+    function runCode() {
+        const code = editor.getValue();
+        document.getElementById('output').textContent = 'Running...';
+        document.getElementById('inputBox').style.display = 'none';
+        fetch('/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code })
+        })
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('output').innerHTML = data.output.replace(/\n/g, '<br>');
+            if (data.input_required) {
+                document.getElementById('inputBox').style.display = 'block';
+                document.getElementById('userInput').focus();
+            } else if (data.done) {
+                document.getElementById('inputBox').style.display = 'none';
+            }
+        });
+    }
+
+    function saveCode() {
+        const code = editor.getValue();
+        const filename = document.getElementById('filename').value || 'code.mc';
+        fetch('/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, filename })
+        })
+        .then(res => res.json())
+        .then(data => {
+            alert(data.message);
+            updateFileList();
+        });
+    }
+
+    function loadCode() {
+        const filename = document.getElementById('fileList').value || document.getElementById('filename').value || 'code.mc';
+        fetch(`/load?filename=${encodeURIComponent(filename)}`)
+        .then(res => res.json())
+        .then(data => {
+            editor.setValue(data.code);
+            alert(data.message);
+        });
+    }
+
+    function updateFileList() {
+        fetch('/files')
+        .then(res => res.json())
+        .then(data => {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '';
+            data.files.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f;
+                opt.textContent = f;
+                fileList.appendChild(opt);
+            });
+        });
+    }
+
+    function sendInput() {
+        const userInput = document.getElementById('userInput').value;
+        document.getElementById('userInput').value = '';
+        document.getElementById('inputBox').style.display = 'none';
+        fetch('/input', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input: userInput })
+        })
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('output').innerHTML += data.output.replace(/\n/g, '<br>');
+            if (data.input_required) {
+                document.getElementById('inputBox').style.display = 'block';
+                document.getElementById('userInput').focus();
+            } else if (data.done) {
+                document.getElementById('inputBox').style.display = 'none';
+            }
+        });
+    }
+
+    // Initial file list load
+    updateFileList();
+</script>
+</body>
+</html> 
